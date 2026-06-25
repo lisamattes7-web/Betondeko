@@ -204,13 +204,13 @@ input.err,select.err{border-color:#c00!important}
     <div class="fg"><label class="lbl">Preis-Label</label><input id="f-plbl" placeholder="z.B. Klein / Groß" /></div>
     </div>
     <div class="fg">
-      <label class="lbl">Foto</label>
+      <label class="lbl">Fotos <span style="font-size:11px;color:var(--text3);font-weight:400">(max. 5, erstes = Hauptbild)</span></label>
       <button class="camrow" onclick="document.getElementById('f-cam').click()"><i class="ti ti-camera" style="font-size:20px"></i> Kamera öffnen</button>
-      <input type="file" id="f-cam" accept="image/*" capture="environment" class="hidden" onchange="handleImg(event)" />
+      <input type="file" id="f-cam" accept="image/*" capture="environment" class="hidden" onchange="handleImgMulti(event)" />
       <button class="camrow" style="border-color:#c0c0c8;color:#888" onclick="document.getElementById('f-gal').click()"><i class="ti ti-photo" style="font-size:20px"></i> Aus Galerie wählen</button>
-      <input type="file" id="f-gal" accept="image/*" class="hidden" onchange="handleImg(event)" />
-
-      <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+      <input type="file" id="f-gal" accept="image/*" class="hidden" onchange="handleImgMulti(event)" />
+      <div id="f-photos" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+      <div style="display:none">
         <img id="f-prev" class="previmg hidden" alt="Vorschau" />
         <button id="f-clr" class="btn btn-sm btn-red hidden" onclick="clearImg()"><i class="fa-solid fa-trash"></i></button>
       </div>
@@ -731,8 +731,16 @@ function quickOpenFav(id){
 function openPhotoById(id){
   var p=prods.find(function(x){return x.id===id;});
   if(!p||!p.img)return;
-  document.getElementById('photo-full').src=p.img;
-  document.getElementById('photo-info').innerHTML='<strong>'+esc(p.name)+'</strong> &nbsp;'+fmt(p.price)+' €';
+  // Zeige erstes Foto, mit Durchblätter-Funktion wenn mehrere
+  var photos=(p.imgs&&p.imgs.length)?p.imgs:[p.img];
+  document.getElementById('photo-full').src=photos[0];
+  var info='<strong>'+esc(p.name)+'</strong> &nbsp;'+fmt(p.price)+' €';
+  if(photos.length>1){
+    info+='<br><div style="display:flex;gap:6px;margin-top:6px;justify-content:center">'
+      +photos.map(function(src,i){return'<img src="'+src+'" onclick="document.getElementById(\'photo-full\').src=\''+src+'\'" style="width:36px;height:36px;object-fit:cover;border-radius:4px;cursor:pointer;border:'+(i===0?'2px solid #fff':'1px solid rgba(255,255,255,0.4)')+'">';}).join('')
+      +'</div>';
+  }
+  document.getElementById('photo-info').innerHTML=info;
   document.getElementById('m-photo').classList.remove('hidden');
 }
 function openPhoto(src,name,price){
@@ -1119,11 +1127,12 @@ function openPF(id){
   document.getElementById('nc-wrap').classList.add('hidden');
   ['f-name','f-price','f-cat'].forEach(function(x){document.getElementById(x).classList.remove('err');});
   if(!id){
-    ['f-name','f-desc','f-price','f-price2','f-plbl','f-img','f-stock'].forEach(function(x){document.getElementById(x).value='';});
+    ['f-name','f-desc','f-price','f-price2','f-plbl','f-stock'].forEach(function(x){document.getElementById(x).value=''});
     document.getElementById('f-cat').selectedIndex=0;
     document.getElementById('f-season').value='Ganzjährig';
     document.getElementById('f-customprice').checked=false;
     toggleCustomPrice();
+    curPhotos=[];renderPhotoThumbs();
   } else {
     var p=prods.find(function(x){return x.id===id;});if(!p)return;
     document.getElementById('f-name').value=p.name;
@@ -1133,17 +1142,22 @@ function openPF(id){
     document.getElementById('f-plbl').value=p.priceLabel||'';
     document.getElementById('f-cat').value=p.cat;
     document.getElementById('f-season').value=p.season;
-    document.getElementById('f-img').value=p.img||'';
     document.getElementById('f-stock').value=(p.stock!==null&&p.stock!==undefined)?p.stock:'';
     document.getElementById('f-customprice').checked=!!p.customPrice;
     toggleCustomPrice();
-    if(p.img){document.getElementById('f-prev').src=p.img;document.getElementById('f-prev').classList.remove('hidden');document.getElementById('f-clr').classList.remove('hidden');}
+    curPhotos=(p.imgs&&p.imgs.length)?p.imgs.slice():(p.img?[p.img]:[]);
+    renderPhotoThumbs();
+    document.getElementById('f-prev').dataset.src=curPhotos[0]||'';
   }
   document.getElementById('m-prod').classList.remove('hidden');
 }
 
-function handleImg(e){
+// Aktuelle Fotos im Formular (Array, max 5)
+var curPhotos = [];
+
+function handleImgMulti(e){
   var f=e.target.files[0];if(!f)return;
+  if(curPhotos.length>=5){alert('Maximal 5 Fotos pro Produkt.');return;}
   var reader=new FileReader();
   reader.onload=function(ev){
     var img=new Image();
@@ -1155,19 +1169,55 @@ function handleImg(e){
       canvas.height=Math.round(img.height*scale);
       canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
       var compressed=canvas.toDataURL('image/jpeg',0.8);
-      document.getElementById('f-img').value=compressed;
-      document.getElementById('f-prev').src=compressed;
-      document.getElementById('f-prev').classList.remove('hidden');
-      document.getElementById('f-clr').classList.remove('hidden');
+      curPhotos.push(compressed);
+      renderPhotoThumbs();
+      // Hauptbild für Rückwärtskompatibilität
+      document.getElementById('f-prev').dataset.src=curPhotos[0];
     };
     img.src=ev.target.result;
   };
   reader.readAsDataURL(f);
 }
 
+// Auch altes handleImg behalten für Kompatibilität
+function handleImg(e){ handleImgMulti(e); }
+
+function renderPhotoThumbs(){
+  var el=document.getElementById('f-photos');
+  if(!el)return;
+  el.innerHTML=curPhotos.map(function(src,i){
+    return '<div style="position:relative;display:inline-block">'
+      +'<img src="'+src+'" onclick="openPhoto('+i+')" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:'+(i===0?'2px solid #1D9E75':'1px solid var(--border2)')+';cursor:pointer" title="'+(i===0?'Hauptbild':'')+'">'
+      +(i===0?'<span style="position:absolute;top:2px;left:2px;background:#1D9E75;color:#fff;font-size:8px;border-radius:4px;padding:1px 3px">★</span>':'')
+      +'<button onclick="removePhoto('+i+')" style="position:absolute;top:-4px;right:-4px;background:#c00;border:none;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">×</button>'
+      +'</div>';
+  }).join('');
+  // Hinweis wenn voll
+  if(curPhotos.length>=5){
+    el.innerHTML+='<p style="font-size:11px;color:var(--text3);margin-top:4px;width:100%">Maximum erreicht</p>';
+  }
+}
+
+function removePhoto(i){
+  curPhotos.splice(i,1);
+  renderPhotoThumbs();
+  document.getElementById('f-prev').dataset.src=curPhotos[0]||'';
+}
+
+function openPhoto(i){
+  // i kann Index (Zahl) oder src (String) sein
+  var src=typeof i==='number'?curPhotos[i]:i;
+  if(!src)return;
+  document.getElementById('photo-full').src=src;
+  document.getElementById('photo-info').innerHTML='';
+  document.getElementById('m-photo').classList.remove('hidden');
+}
+
 
 function clearImg(){
-  document.getElementById('f-img').value='';
+  curPhotos=[];
+  renderPhotoThumbs();
+  document.getElementById('f-prev').dataset.src='';
   document.getElementById('f-prev').classList.add('hidden');
   document.getElementById('f-clr').classList.add('hidden');
   document.getElementById('f-cam').value='';document.getElementById('f-gal').value='';
@@ -1191,7 +1241,8 @@ function saveProd(){
     desc:document.getElementById('f-desc').value.trim(),
     price:customPrice?0:price,price2:customPrice?null:(isNaN(p2)?null:p2),
     priceLabel:document.getElementById('f-plbl').value.trim(),
-    img:document.getElementById('f-img').value.trim(),
+    img:curPhotos[0]||'',
+    imgs:curPhotos.slice(),
     stock:parseInt(document.getElementById('f-stock').value)||null,
 
     customPrice:customPrice,
@@ -1244,10 +1295,10 @@ function copyProd(){
   document.getElementById('f-plbl').value=p.priceLabel||'';
   document.getElementById('f-cat').value=p.cat;
   document.getElementById('f-season').value=p.season;
-  document.getElementById('f-img').value=p.img||'';
   document.getElementById('f-stock').value=(p.stock!==null&&p.stock!==undefined)?p.stock:'';
-  if(p.img){document.getElementById('f-prev').src=p.img;document.getElementById('f-prev').classList.remove('hidden');document.getElementById('f-clr').classList.remove('hidden');}
-  else{document.getElementById('f-prev').classList.add('hidden');document.getElementById('f-clr').classList.add('hidden');}
+  curPhotos=(p.imgs&&p.imgs.length)?p.imgs.slice():(p.img?[p.img]:[]);
+  renderPhotoThumbs();
+  document.getElementById('f-prev').dataset.src=curPhotos[0]||'';
   // Name-Feld markieren damit man es direkt ändern kann
   document.getElementById('f-name').focus();
   document.getElementById('f-name').select();
