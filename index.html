@@ -314,6 +314,7 @@ var SEASONS = ['Alle','Ganzjährig','Frühjahr/Sommer','Herbst/Winter'];
 var DEF_CATS = ["Gartenzwerg", "Betonkreuz", "Kerzen", "Kränze & Stäbe", "Maritim", "Weihnachten", "Ostern", "Sterne", "Tiere", "Stäbe & Skulpturen", "Herzen", "Häuser", "Blumen", "Schilder & Deko", "Gugelhupf", "Holzdeko", "Kunst", "Sonstiges", "Kugeln", "Herbst", "Schalen"];
 
 var prods = [], dels = [], custCats = [];
+var curPhotos = []; // Aktuelle Fotos im Formular (Funktion 22)
 var selMode = false, selIds = new Set();
 var curProd = null, curDel = null;
 var delBasket = {};
@@ -1151,9 +1152,6 @@ function openPF(id){
   }
   document.getElementById('m-prod').classList.remove('hidden');
 }
-
-// Aktuelle Fotos im Formular (Array, max 5)
-var curPhotos = [];
 
 function handleImgMulti(e){
   var f=e.target.files[0];if(!f)return;
