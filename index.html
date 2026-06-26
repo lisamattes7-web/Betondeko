@@ -733,7 +733,7 @@ function openPhotoById(id){
   var p=prods.find(function(x){return x.id===id;});
   if(!p||!p.img)return;
   // Zeige erstes Foto, mit Durchblätter-Funktion wenn mehrere
-  var photos=(p.imgs&&p.imgs.length)?p.imgs:[p.img];
+  var photos=(p.imgs&&p.imgs.length)?p.imgs.map(function(x){return x.url||x;}):[p.img];
   document.getElementById('photo-full').src=photos[0];
   var info='<strong>'+esc(p.name)+'</strong> &nbsp;'+fmt(p.price)+' €';
   if(photos.length>1){
@@ -1146,7 +1146,7 @@ function openPF(id){
     document.getElementById('f-stock').value=(p.stock!==null&&p.stock!==undefined)?p.stock:'';
     document.getElementById('f-customprice').checked=!!p.customPrice;
     toggleCustomPrice();
-    curPhotos=(p.imgs&&p.imgs.length)?p.imgs.slice():(p.img?[p.img]:[]);
+    curPhotos=(p.imgs&&p.imgs.length)?p.imgs.map(function(x){return typeof x==='string'?{url:x,id:null}:x;}):(p.img?[{url:p.img,id:null}]:[]);
     renderPhotoThumbs();
     document.getElementById('f-prev').dataset.src=curPhotos[0]||'';
   }
@@ -1160,17 +1160,46 @@ function handleImgMulti(e){
   reader.onload=function(ev){
     var img=new Image();
     img.onload=function(){
+      // Komprimieren
       var canvas=document.createElement('canvas');
       var maxW=800;
       var scale=img.width>maxW?maxW/img.width:1;
       canvas.width=Math.round(img.width*scale);
       canvas.height=Math.round(img.height*scale);
       canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-      var compressed=canvas.toDataURL('image/jpeg',0.8);
-      curPhotos.push(compressed);
+      var dataUrl=canvas.toDataURL('image/jpeg',0.8);
+
+      // Platzhalter sofort anzeigen (lokale Vorschau)
+      curPhotos.push({url:dataUrl,id:null,uploading:true});
       renderPhotoThumbs();
-      // Hauptbild für Rückwärtskompatibilität
-      document.getElementById('f-prev').dataset.src=curPhotos[0];
+
+      // Zu Google Drive hochladen
+      var base64=dataUrl.split(',')[1];
+      fetch(GAS_URL,{
+        method:'POST',
+        redirect:'follow',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'uploadPhoto',data:base64,mime:'image/jpeg',name:'foto_'+Date.now()+'.jpg'})
+      })
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res.ok){
+          // Lokale Vorschau durch Drive-URL ersetzen
+          var idx=curPhotos.findIndex(function(p){return p.uploading&&p.url===dataUrl;});
+          if(idx>-1){curPhotos[idx]={url:res.url,id:res.id,uploading:false};}
+          document.getElementById('f-prev').dataset.src=curPhotos[0]?curPhotos[0].url:'';
+          renderPhotoThumbs();
+        } else {
+          alert('Foto-Upload fehlgeschlagen: '+res.error);
+          curPhotos=curPhotos.filter(function(p){return p.url!==dataUrl;});
+          renderPhotoThumbs();
+        }
+      })
+      .catch(function(){
+        alert('Foto-Upload fehlgeschlagen.');
+        curPhotos=curPhotos.filter(function(p){return p.url!==dataUrl;});
+        renderPhotoThumbs();
+      });
     };
     img.src=ev.target.result;
   };
@@ -1183,28 +1212,36 @@ function handleImg(e){ handleImgMulti(e); }
 function renderPhotoThumbs(){
   var el=document.getElementById('f-photos');
   if(!el)return;
-  el.innerHTML=curPhotos.map(function(src,i){
-    return '<div style="position:relative;display:inline-block">'
-      +'<img src="'+src+'" onclick="openPhoto('+i+')" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:'+(i===0?'2px solid #1D9E75':'1px solid var(--border2)')+';cursor:pointer" title="'+(i===0?'Hauptbild':'')+'">'
-      +(i===0?'<span style="position:absolute;top:2px;left:2px;background:#1D9E75;color:#fff;font-size:8px;border-radius:4px;padding:1px 3px">★</span>':'')
+  el.innerHTML=curPhotos.map(function(p,i){
+    var src=p.url||p;
+    var uploading=p.uploading||false;
+    return '<div style="position:relative;display:inline-block;opacity:'+(uploading?'0.5':'1')+'">'
+      +'<img src="'+src+'" onclick="openPhoto('+i+')" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:'+(i===0?'2px solid #1D9E75':'1px solid var(--border2)')+';cursor:pointer">'
+      +(uploading?'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);border-radius:8px;font-size:10px;color:#fff">↑</div>':'')
+      +(i===0&&!uploading?'<span style="position:absolute;top:2px;left:2px;background:#1D9E75;color:#fff;font-size:8px;border-radius:4px;padding:1px 3px">★</span>':'')
       +'<button onclick="removePhoto('+i+')" style="position:absolute;top:-4px;right:-4px;background:#c00;border:none;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">×</button>'
       +'</div>';
   }).join('');
-  // Hinweis wenn voll
   if(curPhotos.length>=5){
     el.innerHTML+='<p style="font-size:11px;color:var(--text3);margin-top:4px;width:100%">Maximum erreicht</p>';
   }
 }
 
 function removePhoto(i){
+  // Foto aus Drive löschen wenn ID vorhanden
+  var p=curPhotos[i];
+  if(p&&p.id){
+    fetch(GAS_URL,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'deletePhoto',id:p.id})});
+  }
   curPhotos.splice(i,1);
   renderPhotoThumbs();
-  document.getElementById('f-prev').dataset.src=curPhotos[0]||'';
+  document.getElementById('f-prev').dataset.src=curPhotos[0]?curPhotos[0].url:'';
 }
 
 function openPhoto(i){
-  // i kann Index (Zahl) oder src (String) sein
-  var src=typeof i==='number'?curPhotos[i]:i;
+  var p=typeof i==='number'?curPhotos[i]:null;
+  var src=p?(p.url||p):i;
   if(!src)return;
   document.getElementById('photo-full').src=src;
   document.getElementById('photo-info').innerHTML='';
@@ -1218,7 +1255,8 @@ function clearImg(){
   document.getElementById('f-prev').dataset.src='';
   document.getElementById('f-prev').classList.add('hidden');
   document.getElementById('f-clr').classList.add('hidden');
-  document.getElementById('f-cam').value='';document.getElementById('f-gal').value='';
+  document.getElementById('f-cam').value='';
+  document.getElementById('f-gal').value='';
 }
 
 function saveProd(){
@@ -1239,8 +1277,9 @@ function saveProd(){
     desc:document.getElementById('f-desc').value.trim(),
     price:customPrice?0:price,price2:customPrice?null:(isNaN(p2)?null:p2),
     priceLabel:document.getElementById('f-plbl').value.trim(),
-    img:curPhotos[0]||'',
-    imgs:curPhotos.slice(),
+    img:curPhotos[0]?curPhotos[0].url||curPhotos[0]:'',
+    imgs:curPhotos.map(function(p){return{url:p.url||p,id:p.id||null};}),
+    imgIds:curPhotos.map(function(p){return p.id||null;}),
     stock:parseInt(document.getElementById('f-stock').value)||null,
 
     customPrice:customPrice,
@@ -1294,7 +1333,7 @@ function copyProd(){
   document.getElementById('f-cat').value=p.cat;
   document.getElementById('f-season').value=p.season;
   document.getElementById('f-stock').value=(p.stock!==null&&p.stock!==undefined)?p.stock:'';
-  curPhotos=(p.imgs&&p.imgs.length)?p.imgs.slice():(p.img?[p.img]:[]);
+  curPhotos=(p.imgs&&p.imgs.length)?p.imgs.map(function(x){return typeof x==='string'?{url:x,id:null}:x;}):(p.img?[{url:p.img,id:null}]:[]);
   renderPhotoThumbs();
   document.getElementById('f-prev').dataset.src=curPhotos[0]||'';
   // Name-Feld markieren damit man es direkt ändern kann
