@@ -1162,12 +1162,12 @@ function handleImgMulti(e){
     img.onload=function(){
       // Komprimieren
       var canvas=document.createElement('canvas');
-      var maxW=800;
+      var maxW=1600;
       var scale=img.width>maxW?maxW/img.width:1;
       canvas.width=Math.round(img.width*scale);
       canvas.height=Math.round(img.height*scale);
       canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-      var dataUrl=canvas.toDataURL('image/jpeg',0.8);
+      var dataUrl=canvas.toDataURL('image/jpeg',0.9);
 
       // Platzhalter sofort anzeigen (lokale Vorschau)
       curPhotos.push({url:dataUrl,id:null,uploading:true});
