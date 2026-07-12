@@ -90,6 +90,32 @@ input.err,select.err{border-color:#c00!important}
       </div>
     </div>
 
+    <!-- FOTO ZUORDNUNG -->
+    <div id="pg-photos" class="hidden">
+      <div class="sticky-top" style="padding:14px 16px 10px">
+        <p style="font-size:16px;font-weight:600;margin-bottom:4px">Fotos zuordnen</p>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Wähle zuerst ein Produkt, dann ein Foto aus Drive.</p>
+        <input type="search" id="photo-search" placeholder="Produkt suchen..." oninput="renderPhotoAssign()" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 200px)">
+        <!-- Linke Seite: Produkte ohne Bild -->
+        <div style="overflow-y:auto;border-right:1px solid var(--border);padding:8px">
+          <p style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;padding:4px 0 8px">Produkte</p>
+          <div id="photo-prod-list"></div>
+        </div>
+        <!-- Rechte Seite: Drive Fotos -->
+        <div style="overflow-y:auto;padding:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <p style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase">Drive Fotos</p>
+            <button class="btn btn-sm btn-green" onclick="loadDrivePhotos()" style="font-size:11px;padding:4px 8px"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+          <div id="drive-photo-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <p style="color:var(--text3);font-size:12px;grid-column:span 2">Lade Fotos...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- SUCHE -->
     <div id="pg-search">
       <div class="sticky-top" style="padding:10px 16px 0">
@@ -155,6 +181,7 @@ input.err,select.err{border-color:#c00!important}
     <button class="nav-btn" id="nb-list" onclick="showPage('list')"><i class="ti ti-list"></i><span>Liste</span></button>
     <button class="nav-btn" id="nb-del" onclick="showPage('del')"><i class="ti ti-file-text"></i><span>Lieferschein</span></button>
     <button class="nav-btn" id="nb-admin" onclick="showPage('admin')"><i class="ti ti-settings"></i><span>Verwalten</span></button>
+    <button class="nav-btn" id="nb-photos" onclick="showPage('photos')"><i class="fa-solid fa-images"></i><span>Fotos</span></button>
   </nav>
 </div>
 
@@ -1567,12 +1594,95 @@ function importJSON(e){
 
 // NAV
 function showPage(p){
-  ['search','list','del','admin'].forEach(function(x){
+  ['search','list','del','admin','photos'].forEach(function(x){
     document.getElementById('pg-'+x).classList.add('hidden');
     document.getElementById('nb-'+x).classList.remove('on');
   });
   document.getElementById('pg-'+p).classList.remove('hidden');
   document.getElementById('nb-'+p).classList.add('on');
+  if(p==='photos'){renderPhotoAssign();loadDrivePhotos();}
+}
+
+// FOTO-ZUORDNUNG
+var selectedProdForPhoto = null;
+var drivePhotos = [];
+
+function renderPhotoAssign(){
+  var q=(document.getElementById('photo-search').value||'').toLowerCase();
+  var list=prods.filter(function(p){
+    return !q||p.name.toLowerCase().indexOf(q)>-1;
+  });
+  list.sort(function(a,b){return a.name.localeCompare(b.name,'de');});
+
+  document.getElementById('photo-prod-list').innerHTML=list.map(function(p){
+    var hasImg=p.img&&p.img.length>5;
+    var isSelected=selectedProdForPhoto&&selectedProdForPhoto.id===p.id;
+    return '<div onclick="selectProdForPhoto('+p.id+')" style="display:flex;align-items:center;gap:8px;padding:7px;border-radius:10px;cursor:pointer;margin-bottom:4px;background:'+(isSelected?'var(--green-bg)':'var(--row-bg)')+';border:1px solid '+(isSelected?'#1D9E75':'transparent')+'">'
+      +'<div style="width:36px;height:36px;border-radius:6px;overflow:hidden;flex-shrink:0;background:var(--border)">'
+      +(hasImg?'<img src="'+esc(p.img)+'" style="width:100%;height:100%;object-fit:cover">':'<i class="ti ti-photo" style="font-size:16px;color:var(--text4);display:flex;align-items:center;justify-content:center;height:100%"></i>')
+      +'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<p style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.name)+'</p>'
+      +'<p style="font-size:10px;color:var(--text3)">'+esc(p.cat)+(hasImg?' · ✓ Hat Foto':' · kein Foto')+'</p>'
+      +'</div></div>';
+  }).join('');
+}
+
+function selectProdForPhoto(id){
+  selectedProdForPhoto=prods.find(function(p){return p.id===id;});
+  renderPhotoAssign();
+}
+
+async function loadDrivePhotos(){
+  document.getElementById('drive-photo-list').innerHTML='<p style="color:var(--text3);font-size:12px;grid-column:span 2">Lade Fotos von Drive...</p>';
+  try {
+    var r=await fetch(GAS_URL+'?action=listPhotos',{redirect:'follow'});
+    var res=await r.json();
+    if(res.ok){
+      drivePhotos=res.photos;
+      renderDrivePhotos();
+    } else {
+      document.getElementById('drive-photo-list').innerHTML='<p style="color:#c00;font-size:12px;grid-column:span 2">Fehler: '+esc(res.error)+'</p>';
+    }
+  } catch(e){
+    document.getElementById('drive-photo-list').innerHTML='<p style="color:#c00;font-size:12px;grid-column:span 2">Verbindungsfehler</p>';
+  }
+}
+
+function renderDrivePhotos(){
+  if(!drivePhotos.length){
+    document.getElementById('drive-photo-list').innerHTML='<p style="color:var(--text3);font-size:12px;grid-column:span 2">Keine Fotos in Drive</p>';
+    return;
+  }
+  document.getElementById('drive-photo-list').innerHTML=drivePhotos.map(function(f){
+    return '<div onclick="assignPhotoById(this)" data-id="'+f.id+'" style="cursor:pointer;border-radius:8px;overflow:hidden;border:2px solid var(--border);aspect-ratio:1" title="'+esc(f.name)+'">'      +'<img src="'+esc(f.url)+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'      +'</div>';
+      +'<img src="'+esc(f.url)+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'
+      +'</div>';
+  }).join('');
+}
+
+function assignPhotoById(el){
+  var fileId=el.dataset.id;
+  var f=drivePhotos.find(function(x){return x.id===fileId;});
+  if(f)assignPhoto(f.id, f.name);
+}
+
+function assignPhoto(fileId, fileName){
+  if(!selectedProdForPhoto){
+    alert('Bitte zuerst ein Produkt auswählen (links).');
+    return;
+  }
+  var url='https://drive.google.com/uc?export=view&id='+fileId;
+  var idx=prods.findIndex(function(p){return p.id===selectedProdForPhoto.id;});
+  if(idx>=0){
+    prods[idx].img=url;
+    prods[idx].imgs=[{url:url,id:fileId}];
+    prods[idx].changed=Date.now();
+    lss('bp',prods);
+    selectedProdForPhoto=prods[idx];
+    renderPhotoAssign();
+    renderSearch();renderAdmin();
+  }
 }
 
 // DARK MODE (Funktion 18)
