@@ -1162,12 +1162,12 @@ function handleImgMulti(e){
     img.onload=function(){
       // Komprimieren
       var canvas=document.createElement('canvas');
-      var maxW=1600;
+      var maxW=800;
       var scale=img.width>maxW?maxW/img.width:1;
       canvas.width=Math.round(img.width*scale);
       canvas.height=Math.round(img.height*scale);
       canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-      var dataUrl=canvas.toDataURL('image/jpeg',0.9);
+      var dataUrl=canvas.toDataURL('image/jpeg',0.8);
 
       // Platzhalter sofort anzeigen (lokale Vorschau)
       curPhotos.push({url:dataUrl,id:null,uploading:true});
@@ -1268,10 +1268,6 @@ function saveProd(){
   if(isNaN(price)){pe.classList.add('err');ok=false;}
   if(!cat||cat==='__new__'){ce.classList.add('err');ok=false;}
   if(!ok){alert('Bitte Pflichtfelder ausfüllen.');return;}
-
-  // Prüfen ob noch Fotos hochgeladen werden
-  var stillUploading=curPhotos.some(function(p){return p.uploading;});
-  if(stillUploading){alert('Bitte warten – Fotos werden noch hochgeladen...');return;}
 
   var p2=parseFloat(document.getElementById('f-price2').value);
   var customPrice=document.getElementById('f-customprice').checked||false;
@@ -1663,19 +1659,45 @@ function renderDashboard(){
   }
 }
 
-// FOTO-MIGRATION: Base64-Bilder zu Drive hochladen
+// FOTO-MIGRATION: alte Drive-URLs reparieren
 async function migratePhotos(){
+  var changed=false;
+
+  // Alte uc?export=view URLs auf lh3 umschreiben
+  prods.forEach(function(p){
+    function fixUrl(url){
+      if(!url)return url;
+      var m=url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if(m)return'https://lh3.googleusercontent.com/d/'+m[1];
+      return url;
+    }
+    var newImg=fixUrl(p.img);
+    if(newImg!==p.img){p.img=newImg;changed=true;}
+    if(p.imgs){
+      p.imgs.forEach(function(x){
+        var nu=fixUrl(x.url);
+        if(nu!==x.url){x.url=nu;changed=true;}
+      });
+    }
+  });
+
+  if(changed){
+    lss('bp',prods);
+    renderSearch();renderList();renderAdmin();
+  }
+
+  // Noch verbliebene Base64-Bilder zu Drive hochladen
   var toMigrate=prods.filter(function(p){
-    return p.img && p.img.startsWith('data:') && (!p.imgs || !p.imgs.length || p.imgs[0].url.startsWith('data:'));
+    return p.img && p.img.startsWith('data:');
   });
   if(!toMigrate.length)return;
 
   var status=document.getElementById('save-status');
-  if(status){status.textContent='Fotos werden migriert ('+toMigrate.length+')...';status.style.display='inline-block';}
+  if(status){status.textContent='Fotos hochladen ('+toMigrate.length+')...';status.style.display='inline-block';}
 
   for(var i=0;i<toMigrate.length;i++){
     var p=toMigrate[i];
-    try {
+    try{
       var base64=p.img.split(',')[1];
       var mime=p.img.split(';')[0].split(':')[1]||'image/jpeg';
       var r=await fetch(GAS_URL,{
@@ -1686,23 +1708,20 @@ async function migratePhotos(){
       var res=await r.json();
       if(res.ok){
         var idx=prods.findIndex(function(x){return x.id===p.id;});
-        if(idx>=0){
-          prods[idx].img=res.url;
-          prods[idx].imgs=[{url:res.url,id:res.id}];
-        }
+        if(idx>=0){prods[idx].img=res.url;prods[idx].imgs=[{url:res.url,id:res.id}];changed=true;}
       }
-    } catch(e){ /* weiter */ }
-    if(status)status.textContent='Fotos migrieren: '+(i+1)+'/'+toMigrate.length+'...';
+    }catch(e){}
+    if(status)status.textContent='Fotos: '+(i+1)+'/'+toMigrate.length+'...';
   }
 
-  if(toMigrate.length>0){
+  if(changed){
     lss('bp',prods);
-    if(status){status.textContent='✓ Fotos migriert';setTimeout(function(){status.style.display='none';},3000);}
+    if(status){status.textContent='✓ Fertig';setTimeout(function(){status.style.display='none';},3000);}
     renderSearch();renderList();renderAdmin();
   }
 }
 
-window.onload = function(){ initDark(); init().then(function(){ setTimeout(migratePhotos, 2000); }); };
+window.onload = function(){ initDark(); init().then(function(){ setTimeout(migratePhotos,2000); }); };
 </script>
 </body>
 </html>
