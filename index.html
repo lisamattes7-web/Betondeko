@@ -218,8 +218,8 @@ input.err,select.err{border-color:#c00!important}
             <p style="font-weight:600;font-size:15px">Foto aus Drive wählen</p>
             <button class="btn btn-sm" onclick="closeDrivePicker()"><i class="fa-solid fa-xmark"></i></button>
           </div>
-          <div id="drive-picker-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:60vh;overflow-y:auto">
-            <p style="color:var(--text3);font-size:12px;grid-column:span 2">Lade Fotos...</p>
+          <div id="drive-picker-list" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;max-height:60vh;overflow-y:auto">
+            <p style="color:var(--text3);font-size:12px;grid-column:span 3">Lade Fotos...</p>
           </div>
         </div>
       </div>
@@ -1700,7 +1700,7 @@ function closeDrivePicker(){
 
 function pickDrivePhoto(el){
   var fileId=el.dataset.fid;
-  var url='https://drive.google.com/uc?export=view&id='+fileId;
+  var url='https://drive.google.com/thumbnail?id='+fileId+'&sz=w800';
   // Zum curPhotos Array hinzufügen
   if(curPhotos.length>=5){alert('Maximal 5 Fotos pro Produkt.');return;}
   curPhotos.push({url:url,id:fileId,uploading:false});
@@ -1796,12 +1796,16 @@ function renderDashboard(){
 async function migratePhotos(){
   var changed=false;
 
-  // Alte uc?export=view URLs auf lh3 umschreiben
+  // lh3 und uc URLs auf thumbnail umschreiben
   prods.forEach(function(p){
     function fixUrl(url){
       if(!url)return url;
-      var m=url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-      if(m)return'https://lh3.googleusercontent.com/d/'+m[1];
+      // lh3.googleusercontent.com/d/ID → thumbnail
+      var m1=url.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+      if(m1)return'https://drive.google.com/thumbnail?id='+m1[1]+'&sz=w800';
+      // uc?export=view&id=ID → thumbnail
+      var m2=url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if(m2)return'https://drive.google.com/thumbnail?id='+m2[1]+'&sz=w800';
       return url;
     }
     var newImg=fixUrl(p.img);
