@@ -218,8 +218,8 @@ input.err,select.err{border-color:#c00!important}
             <p style="font-weight:600;font-size:15px">Foto aus Drive wählen</p>
             <button class="btn btn-sm" onclick="closeDrivePicker()"><i class="fa-solid fa-xmark"></i></button>
           </div>
-          <div id="drive-picker-list" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;max-height:60vh;overflow-y:auto">
-            <p style="color:var(--text3);font-size:12px;grid-column:span 3">Lade Fotos...</p>
+          <div id="drive-picker-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:60vh;overflow-y:auto">
+            <p style="color:var(--text3);font-size:12px;grid-column:span 2">Lade Fotos...</p>
           </div>
         </div>
       </div>
@@ -1681,8 +1681,9 @@ async function openDrivePicker(){
     var res=await r.json();
     if(res.ok&&res.photos.length){
       list.innerHTML=res.photos.map(function(f){
-        return '<div data-fid="'+f.id+'" onclick="pickDrivePhoto(this)" style="cursor:pointer;border-radius:8px;overflow:hidden;border:2px solid var(--border);aspect-ratio:1">'
-          +'<img src="'+f.url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'
+        var thumbUrl='https://drive.google.com/thumbnail?id='+f.id+'&sz=w400';
+        return '<div data-fid="'+f.id+'" onclick="pickDrivePhoto(this)" style="cursor:pointer;border-radius:8px;overflow:hidden;border:2px solid var(--border)">'
+          +'<img src="'+thumbUrl+'" style="width:100%;height:160px;object-fit:cover;display:block" loading="lazy">'
           +'</div>';
       }).join('');
     } else {
