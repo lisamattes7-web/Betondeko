@@ -290,6 +290,7 @@ input.err,select.err{border-color:#c00!important}
     </div>
     <div id="d-view"></div>
     <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-sm btn-green" onclick="editDel()" style="flex:1;justify-content:center"><i class="fa-solid fa-pen"></i> Bearbeiten</button>
       <button class="btn btn-sm" onclick="printLabelsFromDel()"><i class="fa-solid fa-tag"></i></button>
       <button class="btn btn-red btn-sm" onclick="deleteDel()"><i class="fa-solid fa-trash"></i></button>
     </div>
@@ -817,6 +818,7 @@ function renderDels(){
 }
 
 function openDelForm(){
+  window._editDelId=null;
   delBasket={};
   renderDelPicker(prods);
   document.getElementById('d-s').value='';
@@ -842,53 +844,78 @@ function filterDel(q){
 }
 
 function renderDelPicker(list){
-  // Artikel mit 2 Preisen als 2 separate Zeilen
-  // Globaler Index statt ID als Schlüssel
+  // Key = stabile ID basierend auf Produkt-ID + Variante (nicht Index!)
+  // So bleiben delBasket-Keys korrekt auch nach Filterung
   window._delRows=[];
+  window._delRowMap={};
   list.forEach(function(p){
     if(p.price2&&p.priceLabel){
       var lbl1=(p.priceLabel.split('/')[0]||'').trim();
       var lbl2=(p.priceLabel.split('/')[1]||'').trim();
-      window._delRows.push({key:window._delRows.length,name:p.name,subname:lbl1,price:p.price,orig:p});
-      window._delRows.push({key:window._delRows.length,name:p.name,subname:lbl2,price:p.price2,orig:p});
+      var k1=String(p.id)+'_1';
+      var k2=String(p.id)+'_2';
+      window._delRows.push({key:k1,name:p.name,subname:lbl1,price:p.price,orig:p});
+      window._delRows.push({key:k2,name:p.name,subname:lbl2,price:p.price2,orig:p});
+      window._delRowMap[k1]=window._delRows[window._delRows.length-2];
+      window._delRowMap[k2]=window._delRows[window._delRows.length-1];
     } else {
+      var k=String(p.id)+'_0';
       if(p.customPrice){
-        window._delRows.push({key:window._delRows.length,name:p.name,subname:'Preis nach Größe',price:0,customPrice:true,orig:p});
+        window._delRows.push({key:k,name:p.name,subname:'Preis nach Größe',price:0,customPrice:true,orig:p});
       } else {
-        window._delRows.push({key:window._delRows.length,name:p.name,subname:'',price:p.price,orig:p});
+        window._delRows.push({key:k,name:p.name,subname:'',price:p.price,orig:p});
       }
+      window._delRowMap[k]=window._delRows[window._delRows.length-1];
     }
   });
-  document.getElementById('d-picker').innerHTML=window._delRows.map(function(r){
-    var qty=delBasket[r.key]||0;
-    var priceDisplay=r.customPrice
-      ?'<input type="number" step="0.5" min="0" placeholder="Preis" id="dcp'+r.key+'" onchange="setCustomPrice('+r.key+',this.value)" style="width:70px;font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid #d0d0c8" />'
-      :'<p style="font-size:11px;color:#0F6E56;font-weight:600">'+fmt(r.price)+' €</p>';
-    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
-      +'<div style="flex:1;min-width:0">'
-      +'<p style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name)+(r.subname?' <span style="font-weight:400;color:#888;font-size:12px">('+esc(r.subname)+')</span>':'')+'</p>'
-      +priceDisplay
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:4px">'
-      +'<button class="qbtn" onclick="chgQty('+r.key+',-1)">−</button>'
-      +'<span style="font-size:14px;font-weight:600;min-width:22px;text-align:center" id="dq'+r.key+'">'+qty+'</span>'
-      +'<button class="qbtn" onclick="chgQty('+r.key+',1)">+</button>'
-      +'</div></div>';
-  }).join('');
-}
+   document.getElementById('d-picker').innerHTML=window._delRows.map(function(r){
+     var qty=delBasket[r.key]||0;
+     var sk=r.key.replace(/[^a-z0-9]/gi,'-');
+     var priceDisplay=r.customPrice
+       ?'<input type="number" step="0.5" min="0" placeholder="Preis" id="dcp-'+sk+'" onchange="setCustomPriceKey(this,\''+r.key+'\')" style="width:70px;font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid #d0d0c8" />'
+       :'<p style="font-size:11px;color:#0F6E56;font-weight:600">'+fmt(r.price)+' €</p>';
+     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
+       +'<div style="flex:1;min-width:0">'
+       +'<p style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name)+(r.subname?' <span style="font-weight:400;color:#888;font-size:12px">('+esc(r.subname)+')</span>':'')+'</p>'
+       +priceDisplay
+       +'</div>'
+       +'<div style="display:flex;align-items:center;gap:4px">'
+       +'<button class="qbtn" onclick="chgQtyKey(this)" data-key="'+r.key+'" data-d="-1">−</button>'
+       +'<span style="font-size:14px;font-weight:600;min-width:22px;text-align:center" id="dq-'+sk+'">'+qty+'</span>'
+       +'<button class="qbtn" onclick="chgQtyKey(this)" data-key="'+r.key+'" data-d="1">+</button>'
+       +'</div></div>';
+   }).join('');
+ }
 
 function setCustomPrice(key,val){
-  var row=(window._delRows||[])[parseInt(key)];
+  var row=(window._delRowMap||{})[key];
   if(row)row.price=parseFloat(val)||0;
   updDelSum();
 }
 
+function chgQtyKey(btn){
+  var key=btn.dataset.key;
+  var d=parseInt(btn.dataset.d);
+  if(!delBasket[key])delBasket[key]=0;
+  delBasket[key]=Math.max(0,delBasket[key]+d);
+  var sk=key.replace(/[^a-z0-9]/gi,'-');
+  var el=document.getElementById('dq-'+sk);
+  if(el)el.textContent=delBasket[key];
+  if(!delBasket[key])delete delBasket[key];
+  updDelSum();
+}
 function chgQty(key,d){
   if(!delBasket[key])delBasket[key]=0;
   delBasket[key]=Math.max(0,delBasket[key]+d);
-  var el=document.getElementById('dq'+key);
+  var sk=key.replace(/[^a-z0-9]/gi,'-');
+  var el=document.getElementById('dq-'+sk);
   if(el)el.textContent=delBasket[key];
   if(!delBasket[key])delete delBasket[key];
+  updDelSum();
+}
+function setCustomPriceKey(inp,key){
+  var row=(window._delRowMap||{})[key];
+  if(row)row.price=parseFloat(inp.value)||0;
   updDelSum();
 }
 
@@ -896,7 +923,7 @@ function updDelSum(){
   var cnt=0,tot=0;
   for(var key in delBasket){
     var qty=delBasket[key];
-    var row=window._delRows[parseInt(key)];
+    var row=(window._delRowMap||{})[key];
     if(row&&qty){cnt+=qty;tot+=qty*row.price;}
   }
   document.querySelectorAll('.extra-row').forEach(function(r){
@@ -915,7 +942,7 @@ function saveDel(){
   for(var key in delBasket){
     var qty=delBasket[key];
     if(!qty)continue;
-    var row=(window._delRows||[])[parseInt(key)];
+    var row=(window._delRowMap||{})[key];
     if(!row)continue;
     var label=row.name+(row.subname?' ('+row.subname+')':'');
     items.push({id:row.orig.id,name:label,qty:qty,price:row.price,cat:row.orig.cat});
@@ -932,7 +959,14 @@ function saveDel(){
     }
   });
   if(!items.length){alert('Bitte Artikel hinzufügen.');return;}
-  dels.push({id:Date.now().toString(),shop:shop,date:date,items:items,total:Math.round(tot*100)/100,created:new Date().toISOString()});
+  if(window._editDelId){
+    // Bestehenden Lieferschein überschreiben
+    var idx=dels.findIndex(function(d){return d.id===window._editDelId;});
+    if(idx>=0){dels[idx]={id:window._editDelId,shop:shop,date:date,items:items,total:Math.round(tot*100)/100,created:dels[idx].created};}
+    window._editDelId=null;
+  } else {
+    dels.push({id:Date.now().toString(),shop:shop,date:date,items:items,total:Math.round(tot*100)/100,created:new Date().toISOString()});
+  }
   lss('bd',dels);closeM('m-del');renderDels();
 }
 
@@ -964,6 +998,55 @@ function deleteDel(){
   if(!confirm('Lieferschein löschen?'))return;
   dels=dels.filter(function(d){return d.id!==curDel;});
   lss('bd',dels);closeM('m-del-view');renderDels();
+}
+
+function editDel(){
+  var d=dels.find(function(x){return x.id===curDel;});
+  if(!d)return;
+  // Lieferschein-Formular öffnen und mit bestehenden Daten befüllen
+  closeM('m-del-view');
+  delBasket={};
+  // Alle Produkte laden
+  renderDelPicker(prods);
+  // Bestehendes Datum + Shop eintragen
+  document.getElementById('d-shop').value=d.shop||'';
+  document.getElementById('d-date').value=d.date||'';
+  document.getElementById('d-s').value='';
+  document.getElementById('d-extras').innerHTML='';
+  // Bestehende Artikel in delBasket laden
+  d.items.forEach(function(item){
+    if(item.id==='extra'){
+      // Sonderwunsch
+      addExtra();
+      var rows=document.querySelectorAll('.extra-row');
+      var last=rows[rows.length-1];
+      if(last){
+        last.querySelector('.en').value=item.name;
+        last.querySelector('.ep').value=item.price;
+        last.querySelector('.eq').value=item.qty;
+      }
+    } else {
+      // Normales Produkt - Key finden
+      var matchKey=null;
+      for(var k in window._delRowMap){
+        var r=window._delRowMap[k];
+        var label=r.name+(r.subname?' ('+r.subname+')':'');
+        if(label===item.name&&Math.abs(r.price-item.price)<0.01){
+          matchKey=k;break;
+        }
+      }
+      if(matchKey){
+        delBasket[matchKey]=item.qty;
+        var sk=matchKey.replace(/[^a-z0-9]/gi,'-');
+        var el=document.getElementById('dq-'+sk);
+        if(el)el.textContent=item.qty;
+      }
+    }
+  });
+  updDelSum();
+  // Speichern überschreibt den bestehenden Lieferschein
+  window._editDelId=curDel;
+  document.getElementById('m-del').classList.remove('hidden');
 }
 
 function printDel(){
