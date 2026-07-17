@@ -873,7 +873,7 @@ function renderDelPicker(list){
      var priceDisplay=r.customPrice
        ?'<input type="number" step="0.5" min="0" placeholder="Preis" id="dcp-'+sk+'" onchange="setCustomPriceKey(this,\''+r.key+'\')" style="width:70px;font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid #d0d0c8" />'
        :'<p style="font-size:11px;color:#0F6E56;font-weight:600">'+fmt(r.price)+' €</p>';
-     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
+     return '<div class="del-row" data-name="'+r.name+'" data-cat="'+(r.orig&&r.orig.cat||'')+'" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
        +'<div style="flex:1;min-width:0">'
        +'<p style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name)+(r.subname?' <span style="font-weight:400;color:#888;font-size:12px">('+esc(r.subname)+')</span>':'')+'</p>'
        +priceDisplay
