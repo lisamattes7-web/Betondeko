@@ -838,9 +838,16 @@ function addExtra(){
 }
 
 function filterDel(q){
-  var f=q?prods.filter(function(p){return p.name.toLowerCase().indexOf(q.toLowerCase())>-1||p.cat.toLowerCase().indexOf(q.toLowerCase())>-1;}):prods;
-  renderDelPicker(f);
+  // Nur ein-/ausblenden – nie neu aufbauen!
+  var rows=document.querySelectorAll('#d-picker .del-row');
+  var ql=(q||'').toLowerCase();
+  rows.forEach(function(row){
+    var name=(row.dataset.name||'').toLowerCase();
+    var cat=(row.dataset.cat||'').toLowerCase();
+    row.style.display=(!q||name.indexOf(ql)>-1||cat.indexOf(ql)>-1)?'flex':'none';
+  });
 }
+
 
 function renderDelPicker(list){
   // Key = stabile ID basierend auf Produkt-ID + Variante (nicht Index!)
@@ -902,6 +909,12 @@ function chgQtyKey(btn){
   if(el)el.textContent=delBasket[key];
   if(!delBasket[key])delete delBasket[key];
   updDelSum();
+  // Suchfeld leeren und alle Zeilen zeigen nach Auswahl
+  var sinput=document.getElementById('d-s');
+  if(sinput&&sinput.value){
+    sinput.value='';
+    filterDel('');
+  }
 }
 function chgQty(key,d){
   if(!delBasket[key])delBasket[key]=0;
